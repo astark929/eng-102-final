@@ -1,7 +1,7 @@
 #include <Servo.h>
 #include <Arduino.h>
 //universal library
-//test
+
 #include "variable.h"
 #include "move.h"
 //created library
@@ -263,7 +263,116 @@ void auto_avoidance(){
     thereis=0;
   }
 }
+//IR OBSTACLE SENSOR
+// ===== IR Sensor =====
+const int irPin = 2;
 
+
+// ===== Speed =====
+int speedPWM = 100;
+
+// ===== Setup =====
+void setup() {
+
+  pinMode(ENA, OUTPUT);
+  pinMode(ENB, OUTPUT);
+  pinMode(ENC, OUTPUT);
+  pinMode(END, OUTPUT);
+
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+
+  pinMode(IN5, OUTPUT);
+  pinMode(IN6, OUTPUT);
+
+  pinMode(IN7, OUTPUT);
+  pinMode(IN8, OUTPUT);
+
+  pinMode(irPin, INPUT);
+  pinMode(buzzerPin, OUTPUT);
+}
+
+// ===== Movement Functions =====
+
+void moveForward() {
+  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
+  digitalWrite(IN5, HIGH); digitalWrite(IN6, LOW);
+  digitalWrite(IN7, HIGH); digitalWrite(IN8, LOW);
+
+  analogWrite(ENA, speedPWM);
+  analogWrite(ENB, speedPWM);
+  analogWrite(ENC, speedPWM);
+  analogWrite(END, speedPWM);
+}
+
+void moveBackward() {
+  digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
+  digitalWrite(IN5, LOW); digitalWrite(IN6, HIGH);
+  digitalWrite(IN7, LOW); digitalWrite(IN8, HIGH);
+
+  analogWrite(ENA, speedPWM);
+  analogWrite(ENB, speedPWM);
+  analogWrite(ENC, speedPWM);
+  analogWrite(END, speedPWM);
+}
+
+void moveRight() {
+  // Mecanum right movement
+  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);   // FL forward
+  digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH);  // RL backward
+  digitalWrite(IN5, LOW);  digitalWrite(IN6, HIGH);  // FR backward
+  digitalWrite(IN7, HIGH); digitalWrite(IN8, LOW);   // RR forward
+
+  analogWrite(ENA, speedPWM);
+  analogWrite(ENB, speedPWM);
+  analogWrite(ENC, speedPWM);
+  analogWrite(END, speedPWM);
+}
+
+void stopCar() {
+  analogWrite(ENA, 0);
+  analogWrite(ENB, 0);
+  analogWrite(ENC, 0);
+  analogWrite(END, 0);
+}
+
+
+// ===== Loop =====
+void loop() {
+
+  int sensorValue = digitalRead(irPin);
+
+  // If no obstacle → move forward
+  if (sensorValue == HIGH) {
+    moveForward();
+  }
+
+  // If obstacle detected
+  else {
+    stopCar();
+
+    beep();
+
+    // Move backward for 1 second
+    moveBackward();
+    delay(1000);
+
+    stopCar();
+    delay(200);
+
+    // Move right for 2 seconds
+    moveRight();
+    delay(2000);
+
+    stopCar();
+    delay(200);
+  }
+}
 String watchsurrounding(){
 /*  obstacle_status is a binary integer, its last 5 digits stands for if there is any obstacles in 5 directions,
  *   for example B101000 last 5 digits is 01000, which stands for Left front has obstacle, B100111 means front, right front and right ha
