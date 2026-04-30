@@ -69,6 +69,7 @@ othervariables need
 #define LOW_SPEED 80    
 #define LONG_DELAY_TIME 70 
 #define DELAY_TIME 40 
+
 #define SHORT_DELAY_TIME 30 
 
 const int distancelimit = 30; //distance limit for obstacles in front           
@@ -90,8 +91,8 @@ const int blue = 10;
 const int green = 6;
 
 
-#define RightObstacleSensor 2  //Right lidar
-#define LeftObstacleSensor 3   //Left lidar
+#define RightObstacleSensor 37  //Right lidar
+#define LeftObstacleSensor 36   //Left lidar
 //lidar sensors
 
 
