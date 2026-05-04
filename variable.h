@@ -36,6 +36,7 @@ sensor pins below
 
 #define Echo_PIN    31 // Ultrasonic Echo pin connect to A5
 #define Trig_PIN    30  // Ultrasonic Trig pin connect to A4
+
 // ultrasonic sensor
 
 #define sensor1   A4 // Left most sensor
@@ -80,7 +81,25 @@ const uint8_t input  = INPUT;
 const uint8_t high = HIGH;
 const uint8_t low  = LOW;
 
+const int ENA = speedPinRB;
+const int ENB = speedPinLB;
+const int ENC = speedPinR;
+const int END = speedPinL;
 
+const int IN1 = RightMotorDirPin1B;
+const int IN2 = RightMotorDirPin2B;
+
+const int IN3 = LeftMotorDirPin1B;
+const int IN4 = LeftMotorDirPin2B;
+
+const int IN5 = RightMotorDirPin1;
+const int IN6 = RightMotorDirPin2;
+
+const int IN7 = LeftMotorDirPin1;
+const int IN8 = LeftMotorDirPin2;
+
+const int irLeft  = 36;
+const int irRight = 37;
 /*
 ---------------------------------------------------
 other stuff that may be useful later
@@ -91,8 +110,17 @@ const int blue = 10;
 const int green = 6;
 
 
-#define RightObstacleSensor 37  //Right lidar
-#define LeftObstacleSensor 36   //Left lidar
+#define RightObstacleSensor 2  //Right lidar
+#define LeftObstacleSensor 3   //Left lidar
+/*
+my robot
+2
+3
+-------------------------
+testbot
+37
+36
+*/
 //lidar sensors
 
 
