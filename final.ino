@@ -1,9 +1,14 @@
 #include "variable.h"
 #include "move.h"
+//personal libraries
+
+#include <Arduino.h>
+#include <Servo.h>
+//global library
 
 move m;
 Servo s;
-
+//objects
 
 
 //int speedPWM = 75;
@@ -83,6 +88,7 @@ void setup() {
   Serial.begin(9600);
 }
 
+/*
 void loop() {
   debugMain();
 
@@ -141,6 +147,36 @@ void loop() {
   }
 
   delay(30);
+}
+*/
+void loop() {
+/*
+  if (state == TRACKING) {
+
+    if (obstacleAhead()) {
+      Serial.println("[LOOP] Obstacle detected -> AVOIDING");
+
+      state = AVOIDING;
+      stopCar();
+      delay(100);
+    }
+    else {
+      tracking();
+    }
+
+  }
+
+  else if (state == AVOIDING) {
+
+    avoidObstacle();
+
+    // Only return when YOU decide inside avoidObstacle()
+    // (do NOT auto-switch here)
+
+  }
+  */
+  avoidObstacle();
+
 }
 
 // ================= TRACKING =================
@@ -231,137 +267,131 @@ void recoverLine() {
 // ================= OBSTACLE AVOIDANCE =================
 
 void avoidObstacle() {
-  Serial.println("[AVOID] Running avoidObstacle()");
+  Serial.println("===== AVOID OBJECT =====");
 
-  // Most important rule:
-  // If line is seen ANYWHERE during avoidance, immediately return to tracking.
-  if (lineDetected()) {
-    Serial.println("[AVOID] Line detected during avoidance -> TRACKING");
+  stopCar();
+  delay(150);
 
+  // 1. Choose side using lidars
+  int leftLidar  = digitalRead(LeftObstacleSensor);
+  int rightLidar = digitalRead(RightObstacleSensor);
+
+  if (leftLidar == LOW && rightLidar == HIGH) {
+    avoidDir = 1;   // object more left, go right
+  }
+  else if (rightLidar == LOW && leftLidar == HIGH) {
+    avoidDir = -1;  // object more right, go left
+  }
+  else {
+    avoidDir = 1;   // default right
+  }
+
+  // 2. Sidestep until front is clear
+  while (obstacleAhead()) {
+    if (lineDetected()) {
+      state = TRACKING;
+      s.write(90);
+      stopCar();
+      return;
+    }
+
+    if (avoidDir == 1) {
+      Serial.println("[AVOID] Sliding right");
+      moveRight();
+    } else {
+      Serial.println("[AVOID] Sliding left");
+      moveLeft();
+    }
+
+    delay(150);
     stopCar();
-    delay(80);
-
-    s.write(servoCenter);
-    state = TRACKING;
-    avoidState = AVOID_START;
-    return;
+    delay(50);
   }
 
-  switch (avoidState) {
-
-    case AVOID_START:
-      Serial.println("[AVOID] State: AVOID_START");
-
-      stopCar();
-      s.write(servoCenter);
-      delay(150);
-
-      chooseAvoidDirection();
-
-      if (avoidDir == 1) {
-        Serial.println("[AVOID] Moving RIGHT around obstacle");
-        s.write(servoLeft); 
-      }
-      else {
-        Serial.println("[AVOID] Moving LEFT around obstacle");
-        s.write(servoRight);
-      }
-
-      delay(300);
-
-      avoidState = AVOID_SIDE_STEP;
-      break;
-
-
-    case AVOID_SIDE_STEP:
-      Serial.println("[AVOID] State: AVOID_SIDE_STEP");
-
-      // Move away from obstacle until front is clear.
-      if (obstacleAhead()) {
-        if (avoidDir == 1) {
-          Serial.println("[AVOID] Front blocked, moveRight()");
-          moveRight();
-        }
-        else {
-          Serial.println("[AVOID] Front blocked, moveLeft()");
-          moveLeft();
-        }
-
-        delay(120);
-        stopCar();
-      }
-      else {
-        Serial.println("[AVOID] Front clear -> AVOID_FOLLOW_SIDE");
-
-        stopCar();
-        delay(100);
-
-        avoidState = AVOID_FOLLOW_SIDE;
-      }
-      break;
-
-
-    case AVOID_FOLLOW_SIDE:
-      Serial.println("[AVOID] State: AVOID_FOLLOW_SIDE");
-
-      // Servo is looking sideways at the obstacle.
-      // If it still sees the object, keep moving forward.
-      if (watch() < sideDistance) {
-        Serial.println("[AVOID] Object still beside robot, moving forward");
-
-        moveForward();
-        delay(130);
-        stopCar();
-      }
-      else {
-        Serial.println("[AVOID] Side object lost, wrapping around corner");
-
-        moveForward();
-        delay(250);
-        stopCar();
-
-        if (avoidDir == 1) {
-          Serial.println("[AVOID] Turning left around object edge");
-          sharpLeftTurn(turnSpeed, turnSpeed);
-        }
-        else {
-          Serial.println("[AVOID] Turning right around object edge");
-          sharpRightTurn(turnSpeed, turnSpeed);
-        }
-
-        delay(300);
-        stopCar();
-
-        s.write(servoCenter);
-        delay(150);
-
-        avoidState = AVOID_SEARCH_LINE;
-      }
-      break;
-
-
-    case AVOID_SEARCH_LINE:
-      Serial.println("[AVOID] State: AVOID_SEARCH_LINE");
-
-      // Search for the line while moving back toward original path.
-      if (avoidDir == 1) {
-        Serial.println("[AVOID] Searching line by moving left");
-        moveLeft();
-      }
-      else {
-        Serial.println("[AVOID] Searching line by moving right");
-        moveRight();
-      }
-
-      delay(120);
-      stopCar();
-
-      // Do NOT switch state here unless lineDetected() happens.
-      // The top of avoidObstacle() handles that immediately.
-      break;
+  // 3. Turn servo toward object
+  if (avoidDir == 1) {
+    s.write(150); // look left
+  } else {
+    s.write(30);  // look right
   }
+
+  delay(300);
+
+  // 4. Follow the side of the object
+  while (watch() < sidedistancelimit) {
+    if (lineDetected()) {
+      state = TRACKING;
+      s.write(90);
+      stopCar();
+      return;
+    }
+
+    Serial.println("[AVOID] Following object side");
+
+    // Use lidar object-following behavior
+    int r = digitalRead(RightObstacleSensor);
+    int l = digitalRead(LeftObstacleSensor);
+
+    if (l == LOW && r == LOW) {
+      moveForward();
+    }
+    else if (l == LOW && r == HIGH) {
+      sharpRightTurn(TURN_SPEED, TURN_SPEED);
+    }
+    else if (l == HIGH && r == LOW) {
+      sharpLeftTurn(TURN_SPEED, TURN_SPEED);
+    }
+    else {
+      moveForward();
+    }
+
+    delay(120);
+    stopCar();
+    delay(30);
+  }
+
+  // 5. Object side ended, wrap around corner
+  Serial.println("[AVOID] Object edge reached");
+
+  moveForward();
+  delay(300);
+  stopCar();
+
+  if (avoidDir == 1) {
+    sharpLeftTurn(TURN_SPEED, TURN_SPEED);
+  } else {
+    sharpRightTurn(TURN_SPEED, TURN_SPEED);
+  }
+
+  delay(350);
+  stopCar();
+
+  s.write(90);
+  delay(150);
+
+  // 6. Move forward after corner while looking for line
+  while (!lineDetected()) {
+    Serial.println("[AVOID] Moving after corner, searching line");
+
+    // keep avoiding if object appears again
+    if (obstacleAhead()) {
+      if (avoidDir == 1) moveRight();
+      else moveLeft();
+    } else {
+      moveForward();
+    }
+
+    delay(130);
+    stopCar();
+    delay(40);
+  }
+
+  Serial.println("[AVOID] Line found -> TRACKING");
+
+  stopCar();
+  s.write(90);
+  state = TRACKING;
 }
-
 // ================= SENSOR HELPERS =================
 
 bool obstacleAhead() {
