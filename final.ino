@@ -6,24 +6,49 @@ Servo s;
 
 
 
-int speedPWM = 75;
+//int speedPWM = 75;
 
-enum AvoidState {
-  CHOOSE_DIR,
-  SLIDE,
-  FORWARD_CLEAR,
-  SCAN_EDGE,
-  RETURN_PATH
-};
 enum RobotState {
   TRACKING,
+  LOST_LINE,
   AVOIDING
 };
 
-AvoidState avoidState = CHOOSE_DIR;
-int avoidDir = 0; // -1 = left, +1 = right
+enum AvoidState {
+  AVOID_START,
+  AVOID_SIDE_STEP,
+  AVOID_FOLLOW_SIDE,
+  AVOID_SEARCH_LINE
+};
 
 RobotState state = TRACKING;
+AvoidState avoidState = AVOID_START;
+
+// -1 = left, +1 = right
+int avoidDir = 1;
+
+// ================= SETTINGS =================
+
+int speedPWM = 85;
+
+const int lineRecoverSpeed = 90;
+const int trackSpeed = 100;
+const int turnSpeed = 100;
+
+const int obstacleDistance = 25;
+const int sideDistance = 30;
+
+const int servoCenter = 90;
+const int servoLeft = 150;
+const int servoRight = 30;
+
+unsigned long lastLineSeenTime = 0;
+int lastLineDir = 0; 
+// -1 = line was left
+// +1 = line was right
+//  0 = center/unknown
+
+//RobotState state = TRACKING;
 
 void setup() {
   pinMode(ENA, OUTPUT);
