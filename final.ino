@@ -59,132 +59,293 @@ void setup() {
 }
 
 void loop() {
-  // /*
-  if(digitalRead(LeftObstacleSensor) == low || digitalRead(RightObstacleSensor) == low){
-    //detects object with lidar 
+  debugMain();
 
-    Serial.println("object detected");
+  if (state == TRACKING) {
+    s.write(servoCenter);
+
+    if (obstacleAhead()) {
+      Serial.println("[MAIN] Obstacle detected -> AVOIDING");
+
+      stopCar();
+      delay(100);
+
+      state = AVOIDING;
+      avoidState = AVOID_START;
+    }
+    else if (!lineDetected()) {
+      Serial.println("[MAIN] Line lost -> LOST_LINE");
+
+      stopCar();
+      delay(50);
+
+      state = LOST_LINE;
+    }
+    else {
+      tracking();
+    }
+  }
+
+  else if (state == LOST_LINE) {
+    s.write(servoCenter);
+
+    if (obstacleAhead()) {
+      Serial.println("[LOST_LINE] Obstacle detected -> AVOIDING");
+
+      stopCar();
+      delay(100);
+
+      state = AVOIDING;
+      avoidState = AVOID_START;
+    }
+    else if (lineDetected()) {
+      Serial.println("[LOST_LINE] Line found -> TRACKING");
+
+      stopCar();
+      delay(50);
+
+      state = TRACKING;
+    }
+    else {
+      recoverLine();
+    }
+  }
+
+  else if (state == AVOIDING) {
     avoidObstacle();
-    //m.stop();
   }
-  else{
-    Serial.println("object not detected");
-    tracking();
-  }
-  //*/
-  //tracking();
-  //avoidObstacle();
-  //moveRight();
-  //m.Forward(100);
-  //m.turn(-100, 100);
+
+  delay(30);
 }
 
+// ================= TRACKING =================
 
-int watch(){
-  long echo_distance;
-
-  digitalWrite(Trig_PIN,LOW);
-  delayMicroseconds(5);                                                                              
-  digitalWrite(Trig_PIN,HIGH);
-  delayMicroseconds(15);
-
-  digitalWrite(Trig_PIN,LOW);
-  echo_distance=pulseIn(Echo_PIN,HIGH);
-  echo_distance=echo_distance*0.01657; //in cm
-
-  return round(echo_distance);
-}
-
-void tracking()
-{
-  String senstr="";
+void tracking() {
   int s0 = !digitalRead(sensor1);
   int s1 = !digitalRead(sensor2);
   int s2 = !digitalRead(sensor3);
   int s3 = !digitalRead(sensor4);
   int s4 = !digitalRead(sensor5);
-  int sensorvalue=32;
-  sensorvalue +=s0*16+s1*8+s2*4+s3*2+s4;
-  senstr= String(sensorvalue,BIN);
-  senstr=senstr.substring(1,6);
-  
-  Serial.print(senstr);
-  Serial.print("\t");
- 
-  if ( senstr=="10000" || senstr=="01000" || senstr=="11000")
-   {
-     Serial.println(" Shift Left");
-      sharpLeftTurn(LOW_SPEED,MID_SPEED);
-    //  left_shift(HIGH_SPEED,HIGH_SPEED,HIGH_SPEED,HIGH_SPEED);
-      delay(DELAY_TIME);
-      m.stop();     
-   }
-   
-  if ( senstr=="11100" || senstr=="10100" )
-  {
-     Serial.println("Slight Shift Left");
-      forward(0, HIGH_SPEED);
-      delay(DELAY_TIME);
-      //m.stop(); 
+
+  if (s0 || s1 || s2 || s3 || s4) {
+    lastLineSeenTime = millis();
+
+    if (s0 || s1) lastLineDir = -1;
+    else if (s3 || s4) lastLineDir = 1;
+    else lastLineDir = 0;
   }
-  if ( senstr=="01100" ||  senstr=="11110"  || senstr=="10010"  || senstr=="10110"  || senstr=="11010")
-  {
-     Serial.println("Slight Left");
-      forward(LOW_SPEED,MID_SPEED);
-      delay(DELAY_TIME);
+
+  String senstr = "";
+  int sensorvalue = 32;
+  sensorvalue += s0 * 16 + s1 * 8 + s2 * 4 + s3 * 2 + s4;
+  senstr = String(sensorvalue, BIN);
+  senstr = senstr.substring(1, 6);
+
+  Serial.print("[TRACKING] Sensors: ");
+  Serial.println(senstr);
+
+  if (senstr == "00100" || senstr == "01110" || senstr == "01100" || senstr == "00110") {
+    Serial.println("[TRACKING] Forward");
+    forward(trackSpeed, trackSpeed);
   }
- if (senstr=="01110" || senstr=="01010" || senstr=="00100"  || senstr=="10001"  || senstr=="10101"  || senstr=="10011" || senstr=="11101" || senstr=="10111" || senstr=="11011"  || senstr=="11001")
-  {
-     Serial.println("Forward");
-      forward(MID_SPEED,MID_SPEED);
-      delay(DELAY_TIME);
-      // m.stop(); 
+
+  else if (senstr == "10000" || senstr == "11000" || senstr == "01000") {
+    Serial.println("[TRACKING] Hard left");
+    sharpLeftTurn(turnSpeed, turnSpeed);
   }
- if ( senstr=="00110" || senstr=="01111" || senstr=="01001" || senstr=="01011" || senstr=="01101")
-  {
-        Serial.println("Slit Right");
-      forward(MID_SPEED,LOW_SPEED);
-      delay(DELAY_TIME);
-      // m.stop(); 
+
+  else if (senstr == "11100" || senstr == "10100" || senstr == "01100") {
+    Serial.println("[TRACKING] Slight left");
+    forward(70, trackSpeed);
   }
- if (senstr=="00111" || senstr=="00101" )
-  {    Serial.println("Slight Shift to Right ");
-       forward(HIGH_SPEED,0);
-      delay(DELAY_TIME);
-     // m.stop(); 
+
+  else if (senstr == "00001" || senstr == "00011" || senstr == "00010") {
+    Serial.println("[TRACKING] Hard right");
+    sharpRightTurn(turnSpeed, turnSpeed);
   }
- if (senstr=="00001" || senstr=="00010" || senstr=="00011")
- {
-   Serial.println("Shift to Right");
-   sharpRightTurn(MID_SPEED,LOW_SPEED);
-    //  right_shift(HIGH_SPEED,HIGH_SPEED,HIGH_SPEED,HIGH_SPEED);
-      delay(DELAY_TIME);
-     // m.stop();   
-        
- }
-  if (  senstr=="00000"){
-        reverse(MID_SPEED);
-   
-      delay(DELAY_TIME/2*3);
-     m.stop();  
+
+  else if (senstr == "00111" || senstr == "00101" || senstr == "00110") {
+    Serial.println("[TRACKING] Slight right");
+    forward(trackSpeed, 70);
   }
- if (  senstr=="11111")
- {
-   Serial.println("Sharp Right U Turn");
-      sharpRightTurn(MID_SPEED,MID_SPEED);
-      delay(DELAY_TIME);
-     // m.stop();     
- }
+
+  else if (senstr == "00000") {
+    Serial.println("[TRACKING] Line lost");
+    stopCar();
+    state = LOST_LINE;
+  }
+
+  else {
+    Serial.println("[TRACKING] Default forward");
+    forward(trackSpeed, trackSpeed);
+  }
 }
 
-bool obstacleDetected() {
-  int dist = watch();  // ultrasonic
+// ================= LINE RECOVERY =================
 
-  int leftLidar  = digitalRead(LeftObstacleSensor);
+void recoverLine() {
+  Serial.println("[RECOVER] Searching for line");
+
+  if (lastLineDir == -1) {
+    Serial.println("[RECOVER] Last line was left, turning left");
+    sharpLeftTurn(lineRecoverSpeed, lineRecoverSpeed);
+  }
+  else if (lastLineDir == 1) {
+    Serial.println("[RECOVER] Last line was right, turning right");
+    sharpRightTurn(lineRecoverSpeed, lineRecoverSpeed);
+  }
+  else {
+    Serial.println("[RECOVER] Unknown direction, slow right spin");
+    sharpRightTurn(lineRecoverSpeed, lineRecoverSpeed);
+  }
+
+  delay(80);
+  stopCar();
+}
+
+// ================= OBSTACLE AVOIDANCE =================
+
+void avoidObstacle() {
+  Serial.println("[AVOID] Running avoidObstacle()");
+
+  // Most important rule:
+  // If line is seen ANYWHERE during avoidance, immediately return to tracking.
+  if (lineDetected()) {
+    Serial.println("[AVOID] Line detected during avoidance -> TRACKING");
+
+    stopCar();
+    delay(80);
+
+    s.write(servoCenter);
+    state = TRACKING;
+    avoidState = AVOID_START;
+    return;
+  }
+
+  switch (avoidState) {
+
+    case AVOID_START:
+      Serial.println("[AVOID] State: AVOID_START");
+
+      stopCar();
+      s.write(servoCenter);
+      delay(150);
+
+      chooseAvoidDirection();
+
+      if (avoidDir == 1) {
+        Serial.println("[AVOID] Moving RIGHT around obstacle");
+        s.write(servoLeft); 
+      }
+      else {
+        Serial.println("[AVOID] Moving LEFT around obstacle");
+        s.write(servoRight);
+      }
+
+      delay(300);
+
+      avoidState = AVOID_SIDE_STEP;
+      break;
+
+
+    case AVOID_SIDE_STEP:
+      Serial.println("[AVOID] State: AVOID_SIDE_STEP");
+
+      // Move away from obstacle until front is clear.
+      if (obstacleAhead()) {
+        if (avoidDir == 1) {
+          Serial.println("[AVOID] Front blocked, moveRight()");
+          moveRight();
+        }
+        else {
+          Serial.println("[AVOID] Front blocked, moveLeft()");
+          moveLeft();
+        }
+
+        delay(120);
+        stopCar();
+      }
+      else {
+        Serial.println("[AVOID] Front clear -> AVOID_FOLLOW_SIDE");
+
+        stopCar();
+        delay(100);
+
+        avoidState = AVOID_FOLLOW_SIDE;
+      }
+      break;
+
+
+    case AVOID_FOLLOW_SIDE:
+      Serial.println("[AVOID] State: AVOID_FOLLOW_SIDE");
+
+      // Servo is looking sideways at the obstacle.
+      // If it still sees the object, keep moving forward.
+      if (watch() < sideDistance) {
+        Serial.println("[AVOID] Object still beside robot, moving forward");
+
+        moveForward();
+        delay(130);
+        stopCar();
+      }
+      else {
+        Serial.println("[AVOID] Side object lost, wrapping around corner");
+
+        moveForward();
+        delay(250);
+        stopCar();
+
+        if (avoidDir == 1) {
+          Serial.println("[AVOID] Turning left around object edge");
+          sharpLeftTurn(turnSpeed, turnSpeed);
+        }
+        else {
+          Serial.println("[AVOID] Turning right around object edge");
+          sharpRightTurn(turnSpeed, turnSpeed);
+        }
+
+        delay(300);
+        stopCar();
+
+        s.write(servoCenter);
+        delay(150);
+
+        avoidState = AVOID_SEARCH_LINE;
+      }
+      break;
+
+
+    case AVOID_SEARCH_LINE:
+      Serial.println("[AVOID] State: AVOID_SEARCH_LINE");
+
+      // Search for the line while moving back toward original path.
+      if (avoidDir == 1) {
+        Serial.println("[AVOID] Searching line by moving left");
+        moveLeft();
+      }
+      else {
+        Serial.println("[AVOID] Searching line by moving right");
+        moveRight();
+      }
+
+      delay(120);
+      stopCar();
+
+      // Do NOT switch state here unless lineDetected() happens.
+      // The top of avoidObstacle() handles that immediately.
+      break;
+  }
+}
+
+// ================= SENSOR HELPERS =================
+
+bool obstacleAhead() {
+  int distance = watch();
+
+  int leftLidar = digitalRead(LeftObstacleSensor);
   int rightLidar = digitalRead(RightObstacleSensor);
 
-  if (dist < 10) return true;
-
+  if (distance > 0 && distance < obstacleDistance) return true;
   if (leftLidar == LOW || rightLidar == LOW) return true;
 
   return false;
@@ -197,192 +358,153 @@ bool lineDetected() {
   int s3 = !digitalRead(sensor4);
   int s4 = !digitalRead(sensor5);
 
-  return (s0 || s1 || s2 || s3 || s4);
+  return s0 || s1 || s2 || s3 || s4;
 }
 
-void avoidObstacle() {
-
-  int dist = watch();
-  int leftLidar  = digitalRead(LeftObstacleSensor);
+void chooseAvoidDirection() {
+  int leftLidar = digitalRead(LeftObstacleSensor);
   int rightLidar = digitalRead(RightObstacleSensor);
 
-  switch (avoidState) {
+  Serial.print("[AVOID] Left lidar: ");
+  Serial.println(leftLidar);
 
-    // 1. Decide direction
-    case CHOOSE_DIR:
-      if (leftLidar == LOW) {
-        avoidDir = 1; // go right
-      } 
-      else {
-        avoidDir = -1; // go left
-      }
-      avoidState = SLIDE;
-      break;
+  Serial.print("[AVOID] Right lidar: ");
+  Serial.println(rightLidar);
 
-    // 2. Move sideways until clear
-    case SLIDE:
-      if (dist < distancelimit || leftLidar == LOW || rightLidar == LOW) {
-        if (avoidDir == -1) moveLeft();
-        else moveRight();
-      } 
-      else {
-        stopCar();
-        delay(100);
-        avoidState = FORWARD_CLEAR;
-      }
-      break;
-
-    // 3. Move forward past object
-    case FORWARD_CLEAR:
-      moveForward();
-      delay(100);
-      stopCar();
-
-      // turn ultrasonic toward object
-      if (avoidDir == -1) {
-        s.write(150); // looking right
-      } 
-      else {
-        s.write(30); // looking left
-      }
-      avoidState = SCAN_EDGE;
-      break;
-
-    // 4. Follow object edge
-    case SCAN_EDGE:
-      if (watch() < distancelimit) {
-        moveForward();
-      } 
-      else {
-        stopCar();
-        avoidState = RETURN_PATH;
-        moveForward();
-        delay(200);
-        stopCar();
-      }
-      break;
-
-    // 5. Move back toward original path
-    case RETURN_PATH:
-      if (avoidDir == -1) moveRight();
-      else moveLeft();
-
-      delay(400);
-      stopCar();
-
-      avoidState = CHOOSE_DIR;
-      state = TRACKING; // hand control back
-      break;
+  if (leftLidar == LOW && rightLidar != LOW) {
+    avoidDir = 1;
   }
+  else if (rightLidar == LOW && leftLidar != LOW) {
+    avoidDir = -1;
+  }
+  else {
+    // Default direction if both see object.
+    avoidDir = 1;
+  }
+
+  Serial.print("[AVOID] avoidDir = ");
+  Serial.println(avoidDir);
 }
 
-bool obstacleAhead(){
-  int distance = watch();
-  int lidarleft = digitalRead(RightObstacleSensor);
-  int lidarright = digitalRead(LeftObstacleSensor);
+int watch() {
+  long duration;
 
-  if(distance < distancelimit || lidarleft == LOW || lidarright == LOW){
-    return true;
+  digitalWrite(Trig_PIN, LOW);
+  delayMicroseconds(5);
+
+  digitalWrite(Trig_PIN, HIGH);
+  delayMicroseconds(15);
+
+  digitalWrite(Trig_PIN, LOW);
+
+  duration = pulseIn(Echo_PIN, HIGH, 25000);
+
+  if (duration == 0) {
+    return 999;
   }
-  return false;
+
+  int distance = duration * 0.0343 / 2;
+  return distance;
 }
 
-void sharpRightTurn(int speed_left,int speed_right)
-{
+// ================= DEBUG =================
+
+void debugMain() {
+  Serial.println("========== MAIN DEBUG ==========");
+
+  Serial.print("Robot State: ");
+  if (state == TRACKING) Serial.println("TRACKING");
+  else if (state == LOST_LINE) Serial.println("LOST_LINE");
+  else if (state == AVOIDING) Serial.println("AVOIDING");
+
+  Serial.print("Avoid State: ");
+  if (avoidState == AVOID_START) Serial.println("AVOID_START");
+  else if (avoidState == AVOID_SIDE_STEP) Serial.println("AVOID_SIDE_STEP");
+  else if (avoidState == AVOID_FOLLOW_SIDE) Serial.println("AVOID_FOLLOW_SIDE");
+  else if (avoidState == AVOID_SEARCH_LINE) Serial.println("AVOID_SEARCH_LINE");
+
+  Serial.print("Ultrasonic: ");
+  Serial.println(watch());
+
+  Serial.print("Left Lidar: ");
+  Serial.println(digitalRead(LeftObstacleSensor));
+
+  Serial.print("Right Lidar: ");
+  Serial.println(digitalRead(RightObstacleSensor));
+
+  Serial.print("Line Detected: ");
+  Serial.println(lineDetected() ? "YES" : "NO");
+
+  Serial.print("Line Sensors: ");
+  printLineSensors();
+
+  Serial.println("================================");
+}
+
+void printLineSensors() {
+  Serial.print(!digitalRead(sensor1));
+  Serial.print(" ");
+  Serial.print(!digitalRead(sensor2));
+  Serial.print(" ");
+  Serial.print(!digitalRead(sensor3));
+  Serial.print(" ");
+  Serial.print(!digitalRead(sensor4));
+  Serial.print(" ");
+  Serial.println(!digitalRead(sensor5));
+}
+
+// ================= MOTOR FUNCTIONS =================
+
+void sharpRightTurn(int speed_left, int speed_right) {
   m.Motor_FL(speed_left);
   m.Motor_BL(speed_left);
   m.Motor_FR(-1 * speed_right);
   m.Motor_BR(-1 * speed_right);
-  /*
-   RL_fwd(speed_left);
-   RR_bck(speed_right);
-   FR_bck(speed_right);
-   FL_fwd(speed_left); 
-   */
 }
-void sharpLeftTurn(int speed_left,int speed_right){
+
+void sharpLeftTurn(int speed_left, int speed_right) {
   m.Motor_FL(-1 * speed_left);
   m.Motor_BL(-1 * speed_left);
   m.Motor_FR(speed_right);
   m.Motor_BR(speed_right);
-  /*
-   RL_bck(speed_left);
-   RR_fwd(speed_right);
-   FR_fwd(speed_right);
-   FL_bck(speed_left); 
-   */
 }
-void forward(int speed_left,int speed_right)
-{
+
+void forward(int speed_left, int speed_right) {
   m.Motor_FL(speed_left);
   m.Motor_BL(speed_left);
   m.Motor_FR(speed_right);
-  m.Motor_BR(speed_right); 
+  m.Motor_BR(speed_right);
 }
-void reverse (int speed)
-{
+
+void reverse(int speed) {
   m.Motor_FL(-1 * speed);
   m.Motor_BL(-1 * speed);
   m.Motor_FR(-1 * speed);
-  m.Motor_BR(-1 * speed); 
+  m.Motor_BR(-1 * speed);
 }
 
 void moveForward() {
-  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
-  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
-  digitalWrite(IN5, HIGH); digitalWrite(IN6, LOW);
-  digitalWrite(IN7, HIGH); digitalWrite(IN8, LOW);
-
-  analogWrite(ENA, speedPWM);
-  analogWrite(ENB, speedPWM);
-  analogWrite(ENC, speedPWM);
-  analogWrite(END, speedPWM);
+  forward(speedPWM, speedPWM);
 }
 
 void moveBackward() {
-  digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
-  digitalWrite(IN5, LOW); digitalWrite(IN6, HIGH);
-  digitalWrite(IN7, LOW); digitalWrite(IN8, HIGH);
-
-  analogWrite(ENA, speedPWM);
-  analogWrite(ENB, speedPWM);
-  analogWrite(ENC, speedPWM);
-  analogWrite(END, speedPWM);
+  reverse(speedPWM);
 }
 
 void moveLeft() {
-  digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
-  digitalWrite(IN5, HIGH); digitalWrite(IN6, LOW);
-  digitalWrite(IN7, LOW);  digitalWrite(IN8, HIGH);
-
-  analogWrite(ENA, speedPWM);
-  analogWrite(ENB, speedPWM);
-  analogWrite(ENC, speedPWM);
-  analogWrite(END, speedPWM);
+  m.Motor_FL(-speedPWM);
+  m.Motor_BL(speedPWM);
+  m.Motor_FR(speedPWM);
+  m.Motor_BR(-speedPWM);
 }
 
 void moveRight() {
-  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH);
-  digitalWrite(IN5, LOW);  digitalWrite(IN6, HIGH);
-  digitalWrite(IN7, HIGH); digitalWrite(IN8, LOW);
-
-  analogWrite(ENA, speedPWM);
-  analogWrite(ENB, speedPWM);
-  analogWrite(ENC, speedPWM);
-  analogWrite(END, speedPWM);
+  m.Motor_FL(speedPWM);
+  m.Motor_BL(-speedPWM);
+  m.Motor_FR(-speedPWM);
+  m.Motor_BR(speedPWM);
 }
 
 void stopCar() {
-  analogWrite(ENA, 0);
-  analogWrite(ENB, 0);
-  analogWrite(ENC, 0);
-  analogWrite(END, 0);
-
-  digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
-  digitalWrite(IN5, LOW); digitalWrite(IN6, LOW);
-  digitalWrite(IN7, LOW); digitalWrite(IN8, LOW);
+  m.stop();
 }
