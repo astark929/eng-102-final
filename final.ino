@@ -11,6 +11,7 @@ Servo s;
 //objects
 
 
+
 //int speedPWM = 75;
 
 enum RobotState {
@@ -46,6 +47,8 @@ const int sideDistance = 30;
 const int servoCenter = 90;
 const int servoLeft = 150;
 const int servoRight = 30;
+
+bool hasLeftLine;
 
 unsigned long lastLineSeenTime = 0;
 int lastLineDir = 0; 
@@ -149,34 +152,80 @@ void loop() {
   delay(30);
 }
 */
-void loop() {
+
 /*
+void loop(){
+  if (state == TRACKING) { 
+    if (obstacleAhead()) { 
+      Serial.println("[LOOP] Obstacle detected -> AVOIDING"); 
+      
+      state = AVOIDING; 
+      stopCar(); 
+      delay(100); 
+      } 
+      else { 
+        tracking(); 
+        } 
+        } 
+        else 
+        if (state == AVOIDING) { 
+          avoidObstacle(); 
+          // Only return when YOU decide inside avoidObstacle() 
+          // (do NOT auto-switch here) }
+}
+*/
+
+void loop() {
   if (state == TRACKING) {
 
     if (obstacleAhead()) {
       Serial.println("[LOOP] Obstacle detected -> AVOIDING");
 
-      state = AVOIDING;
       stopCar();
       delay(100);
+
+      state = AVOIDING;
+    }
+    else if (!lineDetected()) {
+      Serial.println("[LOOP] Line lost -> LOST_LINE");
+
+      stopCar();
+      delay(50);
+
+      state = LOST_LINE;
     }
     else {
       tracking();
     }
+  }
 
+  else if (state == LOST_LINE) {
+    if (obstacleAhead()) {
+      Serial.println("[LOST_LINE] Obstacle detected -> AVOIDING");
+
+      stopCar();
+      delay(100);
+
+      state = AVOIDING;
+    }
+    else if (lineDetected()) {
+      Serial.println("[LOST_LINE] Line found -> TRACKING");
+
+      stopCar();
+      delay(50);
+
+      state = TRACKING;
+    }
+    else {
+      recoverLine();
+    }
   }
 
   else if (state == AVOIDING) {
-
-    avoidObstacle();
-
-    // Only return when YOU decide inside avoidObstacle()
-    // (do NOT auto-switch here)
-
+    avoidObstacle2();
   }
-  */
-  avoidObstacle();
 
+  delay(30);
 }
 
 // ================= TRACKING =================
@@ -288,43 +337,63 @@ void avoidObstacle() {
 
   // 2. Sidestep until front is clear
   while (obstacleAhead()) {
-    if (lineDetected()) {
-      state = TRACKING;
-      s.write(90);
-      stopCar();
-      return;
-    }
 
-    if (avoidDir == 1) {
-      Serial.println("[AVOID] Sliding right");
-      moveRight();
-    } else {
-      Serial.println("[AVOID] Sliding left");
-      moveLeft();
-    }
+  if (!lineDetected()) {
+    hasLeftLine = true;
+  }
+  //checks if it left the line it detected the object from
 
-    delay(150);
+  if (hasLeftLine && lineDetected()) {
+    Serial.println("[AVOID] Line found again after leaving it");
+    state = TRACKING;
+    s.write(90);
     stopCar();
-    delay(50);
+    return;
+  }
+  //once it knows it left the line, and detects a line, it breaks the while 
+  //loop and continue with this code
+
+  if (avoidDir == 1) {
+    Serial.println("[AVOID] Sliding right");
+    moveRight();
+  } 
+  else {
+    Serial.println("[AVOID] Sliding left");
+    moveLeft();
+  }
+  //moves left or right depending on where it sees the object at 
+
+  delay(150);
+  stopCar();
+  delay(50);
   }
 
   // 3. Turn servo toward object
   if (avoidDir == 1) {
-    s.write(150); // look left
-  } else {
-    s.write(30);  // look right
+    s.write(170); // look left
+  } 
+  else {
+    s.write(10);  // look right
   }
 
   delay(300);
+  m.Forward(100);
+  delay(500);
+  m.stop();
+  delay(50);
 
   // 4. Follow the side of the object
   while (watch() < sidedistancelimit) {
+    //uses the ultrasonic sensor to see the object
+    //condition only applies when robot sees the object
+
     if (lineDetected()) {
       state = TRACKING;
       s.write(90);
       stopCar();
       return;
     }
+    //returns servo to initial condition when line is detected 
 
     Serial.println("[AVOID] Following object side");
 
@@ -344,9 +413,10 @@ void avoidObstacle() {
     else {
       moveForward();
     }
+    
 
-    delay(120);
-    stopCar();
+    //delay(120);
+    //stopCar();
     delay(30);
   }
 
@@ -377,7 +447,8 @@ void avoidObstacle() {
     if (obstacleAhead()) {
       if (avoidDir == 1) moveRight();
       else moveLeft();
-    } else {
+    } 
+    else {
       moveForward();
     }
 
@@ -392,6 +463,249 @@ void avoidObstacle() {
   s.write(90);
   state = TRACKING;
 }
+
+void avoidObstacle1() {
+  Serial.println("===== AVOID OBJECT =====");
+
+  bool hasLeftLine = false;
+
+  stopCar();
+  delay(150);
+
+  // Pick avoid direction
+  int leftLidar  = digitalRead(LeftObstacleSensor);
+  int rightLidar = digitalRead(RightObstacleSensor);
+
+  if (leftLidar == LOW && rightLidar == HIGH) {
+    avoidDir = 1;    // go right, object will be on left
+  }
+  else if (rightLidar == LOW && leftLidar == HIGH) {
+    avoidDir = -1;   // go left, object will be on right
+  }
+  else {
+    avoidDir = 1;    // default go right
+  }
+
+  // Move off the original line first
+  Serial.println("[AVOID] Leaving original line");
+
+  while (lineDetected()) {
+    if (avoidDir == 1) {
+      moveRight();
+    } else {
+      moveLeft();
+    }
+
+    delay(120);
+    stopCar();
+    delay(30);
+  }
+
+  hasLeftLine = true;
+
+  // Point ultrasonic toward the object
+  if (avoidDir == 1) {
+    s.write(170); // looking left
+  } else {
+    s.write(10);  // looking right
+  }
+
+  delay(300);
+
+  // Main avoidance loop
+  while (true) {
+    int sideDist = watch();
+
+    Serial.print("[AVOID] Side distance: ");
+    Serial.println(sideDist);
+
+    // If line is found again after leaving original line, exit avoidance
+    if (hasLeftLine && lineDetected()) {
+      Serial.println("[AVOID] New line found -> TRACKING");
+
+      stopCar();
+      s.write(90);
+      delay(100);
+
+      state = TRACKING;
+      return;
+    }
+
+    // Emergency: object directly in front
+    if (obstacleAhead()) {
+      Serial.println("[AVOID] Front blocked, sidestepping");
+
+      if (avoidDir == 1) {
+        moveRight();
+      } else {
+        moveLeft();
+      }
+
+      delay(150);
+      stopCar();
+      delay(40);
+      continue;
+    }
+
+    // Object is too close on the side: move away slightly
+    if (sideDist < 5) {
+      Serial.println("[AVOID] Too close to object, moving away");
+
+      if (avoidDir == 1) {
+        moveRight();
+      } else {
+        moveLeft();
+      }
+
+      delay(120);
+      stopCar();
+      delay(40);
+    }
+
+    // Good distance: move forward along object
+    else if (sideDist >= 5 && sideDist <= sidedistancelimit) {
+      Serial.println("[AVOID] Following object side");
+
+      moveForward();
+      delay(140);
+      stopCar();
+      delay(40);
+    }
+
+    // Object disappeared from side: turn toward the object side to wrap corner
+    else {
+      Serial.println("[AVOID] Object side lost, turning toward object");
+
+      if (avoidDir == 1) {
+        // robot went right, object is on left, so turn left
+        sharpLeftTurn(TURN_SPEED, TURN_SPEED);
+      } else {
+        // robot went left, object is on right, so turn right
+        sharpRightTurn(TURN_SPEED, TURN_SPEED);
+      }
+
+      delay(180);
+      stopCar();
+      delay(40);
+    }
+  }
+  //while statement bracket (i loose track of this one a lot)
+
+
+}
+
+void avoidObstacle2() {
+  Serial.println("===== AVOID OBJECT 1 =====");
+
+  stopCar();
+  delay(150);
+
+  // Choose avoid direction
+  int leftLidar  = digitalRead(LeftObstacleSensor);
+  int rightLidar = digitalRead(RightObstacleSensor);
+
+  if (leftLidar == LOW && rightLidar == HIGH) {
+    avoidDir = 1;    // move right, object is left
+  }
+  else if (rightLidar == LOW && leftLidar == HIGH) {
+    avoidDir = -1;   // move left, object is right
+  }
+  else {
+    avoidDir = 1;    // default right
+  }
+
+  // ============================
+  // WHILE LOOP 1: escape obstacle/line
+  // ============================
+  while (obstacleAhead() || lineDetected()) {
+    Serial.println("[AVOID] Escaping line/front obstacle");
+
+    if (avoidDir == 1) {
+      moveRight();
+    } else {
+      moveLeft();
+    }
+
+    delay(130);
+    stopCar();
+    delay(40);
+  }
+
+  // Move forward a bit after clear
+  Serial.println("[AVOID] Clear space found, moving forward");
+
+  moveForward();
+  delay(350);
+  stopCar();
+  delay(100);
+
+  // Turn servo toward object side
+  if (avoidDir == 1) {
+    s.write(170);    // moved right, object is left
+  } else {
+    s.write(10);   // moved left, object is right
+  }
+
+  delay(300);
+
+  // ============================
+  // WHILE LOOP 2: follow object/search line
+  // ============================
+  while (!lineDetected()) {
+    int sideDistance = watch();
+
+    Serial.print("[AVOID] Side distance: ");
+    Serial.println(sideDistance);
+
+    if (leftLidar == LOW || rightLidar == LOW) {
+      Serial.println("[AVOID] Front blocked, sidestepping");
+
+      if (avoidDir == 1) {
+        moveRight();
+      } else {
+        moveLeft();
+      }
+    }
+    //if lidar detects something in front
+    //it will try to move sideways
+
+    // If ultrasonic sees object, move forward along it
+    else if (sideDistance < 10) {
+      Serial.println("[AVOID] Following object side");
+
+      moveForward();
+    }
+
+    // If lidar and ultrasonic see nothing, object edge is gone
+    else {
+      Serial.println("[AVOID] Object lost, turning toward object side");
+
+      if (avoidDir == 1) {
+        sharpLeftTurn(TURN_SPEED, TURN_SPEED);
+      } else {
+        sharpRightTurn(TURN_SPEED, TURN_SPEED);
+      }
+
+      delay(250);
+      stopCar();
+      delay(80);
+
+      moveForward();
+    }
+
+    delay(130);
+    stopCar();
+    delay(40);
+  }
+
+  // Line found
+  Serial.println("[AVOID] Line found -> TRACKING");
+
+  stopCar();
+  s.write(servoCenter);
+  state = TRACKING;
+}
+
 // ================= SENSOR HELPERS =================
 
 bool obstacleAhead() {
